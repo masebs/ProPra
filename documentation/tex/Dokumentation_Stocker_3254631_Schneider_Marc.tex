@@ -1,0 +1,148 @@
+\documentclass[fontsize=12pt, paper=a4, pagesize=auto, twoside=false, DIV=11, draft=false]{scrartcl}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}	
+\usepackage{lmodern}
+\usepackage[english,ngerman]{babel}
+\usepackage{hyperref}
+\usepackage{amsmath}
+
+\frenchspacing
+
+\title{Stocker - Dokumentation}
+\subtitle{Grundpraktikum Programmierung (1584), Sommersemester 2021}
+\author{Marc S. Schneider, 3254631}
+\date{26. Juni 2021}
+
+\begin{document}
+\maketitle
+
+\section{Einleitung}
+\textbf{Stocker} ist eine Anwendung zur Beobachtung von Aktienkursen und weiteren Börsenwerten, die im Rahmen des Grundpraktikum Programmierung der FernUniversität in Hagen im Sommmersemester 2021, veranstaltet vom Lehrgebiet Programmiersysteme, entstanden ist. Die Daten werden bei Bedarf von einem Datenanbieter über ein Netzwerk oder das Internet beschafft. Standardmäßig sind dies \texttt{finnhub.io} und der \texttt{Kursdatengenerator}; weitere Anbieter können von Nutzer:innen hinzugefügt werden, insofern diese dieselbe API zur Kommunikation anbieten. Zur Beobachtung stehen alle Werte zur Verfügung, die der Datenanbieter in den Rubriken \texttt{quote} und \texttt{stock} unterstützt. Im Falle von \texttt{finnhub.io} sind dies Aktien, Währungen und Kryptowährungen. Die Beobachtung erfolgt in einer Watchlist (Tabelle) oder in Charts, wobei in den Charts zusätzlich technische Indikatoren eingezeichnet und Alarmwerte, bei deren Über- oder Unterschreitung eine Benachrichtigung ausgelöst wird, definiert werden können.
+
+Dieses Dokument gibt eine kurze Einführung in die Bedienung der Anwendung (Abschnitt \ref{sec:Bedienung}), soweit diese nicht aus der Aufgabenstellung hervorgeht oder selbsterklärend ist, gefolgt von einem kurzen Überblick über die Struktur des Programms (Abschnitt \ref{sec:Programmstruktur}) und einer Beschreibung der Implementierung zentraler Programmfunktionen, nämlich der Berechnung der technischen Indikatoren und der Darstellung der Daten in Charts (Abschnitt \ref{sec:Implementierung}).
+
+\section{Funktionsumfang und Bedienung}
+\label{sec:Bedienung}
+Die Anwendung bietet alle Funktionen und erfüllt alle Anforderungen, die aus der Anforderungsliste und den Szenarien in Abschnitt 4 der Aufgabenstellung hervorgehen. Hier werden nur die Funktionen beschrieben, die nicht in den Anforderungen der Aufgabenstellung erwähnt sind und / oder deren Bedienung eventuell nicht selbsterklärend ist.
+
+\subsection{Sitzungsverwaltung}
+Stocker ermöglicht die Darstellung einer großen Zahl von Daten, wodurch leicht die Übersichtlichkeit verloren gehen kann. Zudem ist davon auszugehen, dass ein:e Nutzer:in sich zu verschiedenen Zeiten für verschiedene Börsenwerte interessiert. Zum Beispiel könnten werktags sowohl Aktien also auch Kryptowährungen von Interesse sein, aber am Wochenende, wenn die Aktienmärkte geschlossen sind, ausschließlich Kryptowährungen. Außerdem könnte es für Nutzer:innen sinnvoll sein, verschiedene Rubriken wie zum Beispiel Tech-Werte, Rohstoff-Werte oder Immobilienaktien zu unterscheiden und jeweils nur eine davon gleichzeitig zu betrachten. Um dies zu ermöglichen, unterstützt Stocker das Erstellen und Verwalten von Sitzungen (Sessions). Eine Sitzung umfasst Informationen über die Watchlist-Einträge und geöffnete Charts mit allen Einstellungen und Indikatoren, sowie die Positionen und Größen aller geöffneten Kind-Fenster. Beim ersten Programmstart wird eine Standard-Sitzung mit dem Namen \textit{default} geöffnet. Beim Beenden des Programms wird automatisch die aktuelle Sitzung gespeichert, und beim nächsten Start der Anwendung wird die zuletzt aktive Sitzung wieder geladen. Ansonsten können die Sitzungen folgendermaßen verwaltet werden: 
+\begin{itemize}
+\item \texttt{Sitzung} $\rightarrow$ \texttt{Unter neuem Namen speichern}: Die Sitzung in ihrem aktuellen Zustand wird unter einem neuen Namen gespeichert. 
+\item \texttt{Sitzung} $\rightarrow$ \texttt{Aktuelle Sitzung speichern} (Shortcut: \texttt{Strg + S}) speichert die aktuelle Sitzung.
+\item Wechsel der aktiven Sitzung durch Klick auf den Namen der Sitzung im Menu \texttt{Sitzung}. Nach dem Bestätigen des Wechsels wird gefragt, ob die aktuell aktive Sitzung (die durch den Wechsel verlassen wird) gespeichert werden soll.
+\item \texttt{Sitzung} $\rightarrow$ \texttt{Aktive Sitzung löschen} löscht die aktuell aktive Sitzung (d.h. alle Watchlist-Einträge werden entfernt und alle Charts geschlossen) und eine der anderen Sitzungen wird geladen
+\item \texttt{Sitzung} $\rightarrow$ \texttt{Sitzung zurücksetzen} setzt die aktive Sitzung zurück. Dadurch werden alle Watchlist-Einträge entfernt und alle Charts geschlossen. Die Sitzung selbst bleibt aber unter ihrem Namen bestehen und aktiv.
+\end{itemize}
+
+Die Sitzungen werden programmintern gespeichert und beim Beenden des Programms im JSON-Format in die Datei \texttt{stocker\_3254631\_session.json} im Programmverzeichnis geschrieben. Sie werden nicht mit in die Properties-Datei \texttt{stocker\-\_3254631.json} geschrieben, um die Programmeinstellungen und die Sitzungen voneinander zu trennen (so kann zum Beispiel eine Sitzungs-Datei an eine andere Instanz von Stocker auf einem anderen Rechner übertragen werden, ohne die Einstellungen der anderen Instanz zu überschreiben). 
+
+\subsection{Werte von Nicht-US-Börsen ausblenden}
+Mit dem kostenlosen Zugang bei \texttt{finnhub.io} ist nur der Zugriff auf Werte, die an den US-Börsen \textit{NYSE} und \textit{NASDAQ} gehandelt werden, erlaubt. Die Suchfunktion liefert jedoch Werte von diversen Börsen weltweit, die durch einen Punkt, gefolgt vom Kürzel der jeweiligen Börse im Tickersymbol gekennzeichnet sind (z.B. \texttt{.DE} für die deutsche \textit{XETRA}). Meistens werden viele dieser Nicht-US-Tickersymbole gefunden, und die maximale Anzahl an Suchergebnissen, die \texttt{finnhub.io} liefert, ist begrenzt. Dadurch kann es vorkommen, dass sinnvolle Ergebnisse nicht auftauchen, stattdessen aber viele Ergebnisse von Nicht-US-Börsen, die den Nutzer:innen eines kostenlosen Accounts gar nicht zugänglich sind. Um die Übersichtlichkeit zu verbessern, besteht die Möglichkeit, durch Setzen eines Hakens in den Einstellungen $\rightarrow$ Tab \textit{Datenanbieter} alle Werte mit Punkt (.) im Tickersymbol auszublenden. In der Regel sind dies die Symbole, die mit dem kostenlosen Account nicht zugänglich sind. Leider gibt es einige wenige Tickersymbole, die regulär, also auch an der \textit{NYSE} bzw. \textit{NASDAQ}, einen Punkt im Namen haben, und die nicht mehr gefunden werden, solange diese Option aktiviert ist. Falls Werte in der Suche zu fehlen scheinen, sollte diese Funktion zur Sicherheit abgeschaltet werden. Standardmäßig ist sie abgeschaltet.
+
+\subsection{Gitterlinien}
+In der Menüleiste jedes Chartfenster gibt es eine Checkbox, mit der gestrichelte Gitterlinien (entsprechend der automatisch gewählten Ticks an den Koordinatenachsen) in den Chart eingezeichnet werden können, um die Ablesbarkeit der Daten zu verbessern. Die Gitterlinien sind standardmäßig aktiviert. Ihr Zustand wird mit der Sitzung gespeichert.
+
+\subsection{Tastatur-Shortcuts}
+\begin{table}[!h]
+\begin{tabular}{|c|l|} \hline
+\texttt{Strg + F} & öffnet den Such-Dialog \\ \hline
+\texttt{Strg + W} & zeigt die Watchlist an (bringt sie nötigenfalls in den Vordergrund) \\ \hline
+\texttt{Strg + E} & öffnet den Einstellungs-Dialog \\ \hline
+\texttt{Strg + S} & speichert die aktuelle Sitzung \\ \hline
+\texttt{Strg + I} & im Chart-Fenster: öffnet die Indikator-Verwaltung\\ \hline
+\texttt{Strg + A} & im Chart-Fenster: öffnet die Alarm-Verwaltung \\ \hline
+
+\end{tabular}
+\end{table}
+
+\section{Beschreibung der Programmstruktur}
+\label{sec:Programmstruktur}
+Die Anwendung folgt dem Entwurfsmuster \textit{Model-View-Controller}. Danach richtet sich auch die Aufteilung in Pakete. Die Aufgaben und der Inhalt der einzelnen Pakete werden in den folgenden Unterabschnitten beschrieben.
+
+\subsection{Das Modell: \texttt{stocker.model}}
+Das Paket \texttt{stocker.model} enthält die Datenstrukturen, die zur lokalen Zwischenspeicherung der Daten vom Datenanbieter dienen. Eine echte lokale Datenhaltung existiert nicht: Alle Daten werden bei Bedarf vom Datenanbieter geholt, vorübergehend lokal gespeichert, solange sie gebraucht werden, und anschließend verworfen. Die abstrakte Klasse \texttt{Watch\-Item} definiert elementare Eigenschaften von Datenelementen wie einen Schlüssel (Tickersymbol) und einen Namen. Von ihr abgeleitet ist die Klasse \texttt{Watchlist\-Item}, die geeignet ist, um einen Börsenwert in der Watchlist darzustellen, und die Klasse \texttt{Chart\-Watch\-Item}, die zur Darstellung eines Börsenwerts in einem Chart gedacht ist. Außerdem gibt es die abstrakte Klasse \texttt{ChartIndicator} zur Beschreibung beliebiger Chartindikatoren und ihre Implementierungen \texttt{Chart\-Indicator\-SMA} (für den gleitenden Mittelwert, \textit{Simple Moving Average}) und \texttt{ChartIndicatorBollingerBands} für die Bollinger-Bänder. Um Alarme abzubilden, gibt es die sehr einfach gehaltene Klasse \texttt{Chart\-Alarm}. Der \texttt{AlarmManager} dient als zentrale Stelle zur Verwaltung der Alarme über alle Charts und die Watchlist hinweg. Die Alarme sind jeweils einem Tickersymbol zugeordnet (und nicht einem einzelnen Chart). Eng verbunden mit den Modell-Klassen ist die Klasse \texttt{Candle} aus dem Paket \texttt{stocker.util}, die einen einzelnen Datenpunkt mit den dazugehörenden Werten beschreibt und von allen Modell-Klassen benutzt wird. 
+
+\subsection{Die Ansicht: \texttt{stocker.view}}
+Die Rolle der Ansicht wird übernommen vom \texttt{StockerFrame} (beschreibt das Hauptfenster) sowie von der \texttt{StockerWatchlist} (beschreibt das Kindfenster, das die Watchlist enthält) und \texttt{StockerChart} (ein Kindfenster, das einen Chart darstellt). Sowohl die Watchlist-Klasse als auch die Chart-Klasse implementieren das Interface \texttt{IStocker\-Data\-Listener}, das eine Methode zur Entgegennahme einer Push-Be\-nach\-rich\-ti\-gung\-en über einen neuen Preis vorschreibt. Innerhalb der \texttt{Stocker\-Watchlist} werden einige spezialisierte Versionen von Standard-Swing-Klassen verwendet, um die Tabelle zur Darstellung der Werte zu definieren (\texttt{WatchlistTable}, \texttt{Watchlist\-Table\-Model}, \texttt{Watchlist\-Table\-Cell\-Renderer}). Innerhalb des \texttt{Stocker\-Chart} dient das \texttt{ChartPanel} als Zeichenfläche und übernimmt die Datendarstellung im engeren Sinne. Die Klassen der Ansicht benutzen die Datenformate, die in \texttt{stocker.model} definiert sind, um die Daten zu empfangen und zu verarbeiten. Geliefert werden die Daten vom \texttt{Stocker\-Data\-Manager} aus \texttt{stocker\-.control} (siehe nächster Unterabschnitt).
+ 
+\subsection{Die Steuerung: \texttt{stocker.control}}
+Die Rolle der Steuerung (des Controllers) wird primär von einem Objekt des Typs \texttt{StockerControl} übernommen. Dieses übernimmt unter anderem auch die Sitzungsverwaltung und die Verwaltung der Programmeinstellungen. Sämtliche Aufgaben der Datenbeschaffung vom Datenanbieter wurden aber der Übersichtlichkeit halber in die Klasse \texttt{StockerDataManager} ausgelagert, die funktional gewissermaßen zwischen den Rollen der Steuerung und des Modells steht, aber von der Arbeitsweise her eher zur Steuerung gehört. Der \texttt{StockerDataManager} benutzt einen Websocket-Client (\texttt{WSPushClient}), um sich beim Datenanbieter für Push-Updates anzumelden, und implementiert das Interface \texttt{IStockerDataReceiver}, was ihn befähigt, diese Push-Updates in Empfang zu nehmen und an die Datenempfänger (Watchlist, Charts) weiterzuleiten.
+
+\subsection{Die Dialogfenster: \texttt{stocker.dialog}}
+Die Anwendung kennt verschiedene Arten von Dialogfenstern. Diese erfüllen jeweils eine recht einfache und beschränkte Aufgabe. Um die Programmstruktur nicht unnötig aufzublähen, wurden die Dialoge jeweils in einer einzigen Klasse realisiert, die sowohl die Rollen der Ansicht als auch die der Steuerung übernimmt. Die Aufgabe des Modells (i.e. das Bereitstellen von Daten, die darzustellen sind, bzw. die Entgegennahme von Änderungen an diesen Daten) wird von anderen Programmteilen übernommen. Die Anwendung kennt hauptsächlich vier Arten von Dialogfenstern:
+\begin{itemize}
+\item Der Such-Dialog, Typ \texttt{StockerSearchDialog}, ermöglicht die Suche nach Börsenwerten und stellt das Ergebnis der Suche dar. Er implementiert das Interface \texttt{ISearchDataReceiver}, was ihn zum Empfang von Suchergebnissen qualifiziert
+\item Der Einstellungs-Dialog, Typ \texttt{StockerPropertyDialog}, stellt die Programmeinstellungen dar und ermöglicht Nutzer:innen, Änderungen vorzunehmen
+\item Der Indikator-Dialog, Typ \texttt{StockerIndicatorDialog}, ermöglicht es, in einem Chart technische Indikatoren hinzuzufügen und zu verwalten
+\item Der Alarm-Dialog, Typ \texttt{StockerAlarmDialog}, ermöglicht es, in einem Chart Alarmwerte hinzuzufügen und zu verwalten.
+\end{itemize}
+Daneben werden für sehr einfache Aufgaben direkt die Dialoge von \texttt{JOption\-Pane} (aus Swing) verwendet. 
+
+\subsection{Die sonstigen Hilfsmittel: \texttt{stocker.util}}
+Dieses Paket umfasst diverse Hilfsmittel zur Beschreibung von Daten oder Einstellungen, die sich allerdings überwiegend passiv verhalten und selbst keine Aufgabe im Programmablauf übernehmen. Dazu gehören:
+\begin{itemize}
+\item Die Klasse \texttt{Candle}, die einen einzelnen Datenpunkt aus einem Candlestick-Chart beschreibt (sie dient nur der Zusammenfassung zusammengehöriger Werte im Sinne eines einfachen Records und bietet ansonsten keinerlei Funktionalität)
+\item Die (nicht-instanziierbare) Hilfsklasse \texttt{CandleParser}, die (statische) Methoden zum Erzeugen von \texttt{Candle}s aus JSON-Objekten bereitstellt
+\item Diverse Aufzählungstypen (Enums) zur Beschreibung von Eigenschaften wie z.B. Chart-Typen, Chart-Intervallen oder Chart-Farben (erkennbar daran, dass der Klassenname mit \texttt{E} beginnt)
+\item Weitere Hilfsklassen, zum Beispiel zur Validierung und automatischen Korrektur der Eingabe in Textfeldern (\texttt{Text\-field\-Int\-Vali\-da\-tor\-On\-Fo\-cus\-Lost}) oder um Ausnahmen (Exceptions) im Zusammenhang mit der Datenbeschaffung zu beschreiben (\texttt{StockerDataManagerException})
+\end{itemize}
+
+\section{Beschreibung der Implementierung ausgewählter Aspekte}
+\label{sec:Implementierung}
+
+\subsection{Implementierung der Berechnung der technischen Indikatoren}
+
+\subsubsection{Die abstrakte Basisklasse \texttt{ChartIndicator} und die Sicherstellung der einfachen Erweiterbarkeit}
+Die abstrakte Klasse \texttt{ChartIndicator} dient als Basisklasse für alle Indikatoren. Sie spezifiziert das Verhalten eines Indikators aus Sicht der sonstigen Teile der Anwendung vollständig. Das heißt insbesondere, im Modell, der Ansicht und der Steuerung nur Attribute und Parameter vom Typ \texttt{ChartIndicator} auftreten und nirgends solche von einem der Subtypen. Die verfügbaren Typen von Indikatoren werden im Aufzählungstyp (Enum) \texttt{EChart\-In\-di\-ca\-tor} beschrieben. Dieser besitzt eine Methode \texttt{EChart\-In\-di\-ca\-tor::\-get\-In\-di\-ca\-tor()}, die als Factory dient und einen Indikator von dem Typ, den das Enum repräsentiert, zurückliefert. Eine Erweiterung von Stocker um einen weiteren Indikatortypen ist sehr einfach: Dazu muss nur 1.) der neue Indikator in einer neuen Subklasse von \texttt{ChartIndicator} implementiert werden, und dann 2.) dieser neue Typ in der Definition von \texttt{EChart\-In\-di\-ca\-tor} hinzugefügt werden, und zwar einerseits als möglicher Wert des Enums, und andererseits in der Methode \texttt{EChart\-In\-di\-ca\-tor::\-get\-In\-di\-ca\-tor()}, die als Factory dient.
+
+Verschiedene Indikatoren liefern verschieden viele Werte. Zum Beispiel liefert der gleitende Mittelwert nur einen Wert pro Zeitpunkt, während die Bollinger-Bänder drei Werte spezifizieren (oberes Band, Mittelwert, unteres Band). Um die Bollinger-Bänder (oder potenzielle weitere Indikatoren mit mehr als einem Wert) als einen einzigen Indikator abbilden zu können, besitzt \texttt{ChartIndicator} eine Liste von Listen von Werten (konkret eine \texttt{LinkedList<LinkedList<Double>{>}}): Die \glqq äußere{\grqq} Liste umfasst die verschiedenen Indikator-Werte (im Falle des gleitenden Mittelwerts hat sie also nur ein Element, den Mittelwert; im Falle der Bollinger-Bänder drei Elemente für oberes Band / Mittelwert / unteres Band). Die \glqq innere{\grqq} Liste enthält die Werte an den Zeitpunkten (die zugehörigen Zeit-Werte stehen in einer separaten Liste).
+
+Des Weiteren sieht \texttt{ChartIndicator} Methoden vor, um sich die äußere oder eine beliebige innere Liste, oder Iteratoren auf eine dieser Listen zu beschaffen; um eine Liste von Kerzen (\texttt{LinkedList<Candle>}) zuzuweisen, auf der dieser Indikator basiert; um den Indikator aktiv oder passiv zu setzen (angezeigt im Chart oder nicht); um die Berechnung durchzuführen (\texttt{calculate()}); um eine Liste von Textfeldern nebst beschreibender Texte zur Verfügung zu stellen, die zur Parametrisierung durch den:die Nutzer:in in einem Dialog von \texttt{JOptionPane} genutzt werden können (\texttt{getParametersMessage()}) und auch um den Indikator von ebendiesen Textfeldern zu parametrisieren (\texttt{para\-me\-trize\-From\-Text\-fields()}). Verschiedene Varianten von \textit{String}-Repräsentationen bekommt man mit \texttt{toString()} und \texttt{getType()}. Die Methoden \texttt{getParameters()} und \texttt{setParameters(int[])} liefern bzw. setzen die Parameter als Integer-Array, was zur Serialisierung der Indikatoren im Rahmen der Sitzungsverwaltung nötig ist. 
+
+\subsubsection{Die Klassen für den gleitenden Mittelwert und die Bollinger Bänder}
+Die konkreten Indikatortypen wurden in den Klassen \texttt{ChartIndicatorSMA} (SMA für \textit{Simple Moving Average}) und \texttt{ChartIndicatorBollingerBands} umgesetzt. Beide sind selbstverständlich von \texttt{ChartIndicator} abgeleitet und implementieren dessen abstrakte Methoden, darunter insbesondere \texttt{calculate()} sowie die Methoden, die mit dem Setzen und Abfragen der Parameter zusammenhängen. Die Parameter werden in Attributen der Subklassen gespeichert. Die Werte der Indikatoren stehen in der Liste von Listen, die von der Superklasse \texttt{ChartIndicator} geerbt wurde (die \glqq innere(n)\grqq{} Liste(n) mit den tatsächlichen Werten sind allerdings Attribute der Subklassen). Da für die Berechnung der Bollinger-Bänder ein gleitender Mittelwert erforderlich ist, benutzt \texttt{ChartIndicatorBollingerBands} intern eine Instanz von \texttt{ChartIndicatorSMA}. Die tatsächliche Berechnung in \texttt{calculate()} entspricht der Beschreibung aus der Aufgabenstellung. Da sowohl die zugrundeliegenden Candles, als auch die berechneten Werte in doppelt verketteten Listen (\texttt{LinkedList}) vorliegen, die keinen effizienten wahlfreien Zugriff unterstützen, wird mit Iteratoren gearbeitet, so dass immer nur schrittweise von einem zum nächsten oder vorherigen Element gegangen wird (vorwärts mit \texttt{next()} oder rückwärts mit \texttt{previous()} oder auch abwechselnd, je nach Bedarf). 
+
+Die Berechnung der Indikator-Werte erfolgt auf den diskreten Werten in den Candles so wie sie vorliegen, ohne Berücksichtigung der Zeitskala. Das bedeutet beispielsweise: Ein Gleitender Mittelwert mit Parameter $n = 20$ bezieht sich auf die zurückliegenden 20 Tage, wenn als Chart-Intervall \glqq 1 Tag\grqq{} ausgewählt ist, aber auf die zurückliegenden $40 = 20 \cdot 5$ Minuten, wenn \glqq 5 Minuten\grqq{} als Chart-Intervall gewählt ist. Dieses Verhalten ermöglicht eine sinnvolle Darstellung der Indikatoren auch auf den kurzen Intervallen und ist konsistent mit den Indikator-Werten von \texttt{finnhub.io}, wie sie über die REST-API mit \texttt{/indicator?...} geliefert werden. 
+
+\subsection{Implementierung der Darstellung der Daten in Charts}
+Die Darstellung von Charts erfolgt in Chart-Kindfenstern, die die durch Objekte des Typs \texttt{StockerChart} beschrieben werden (abgeleitet von \texttt{JInternalFrame}). Die tatsächliche Darstellung darin wird vom \texttt{ChartPanel} (abgeleitet von \texttt{JPanel}) übernommen. Um die Daten bei beliebigen Fenstergrößen darstellen zu können, unternimmt das \texttt{ChartPanel} im Wesentlichen zwei Schritte der Skalierung:
+
+\subsubsection{Skalierungsschritt 1: Vom Daten-Koordinatensystem ins Referenz-System des Panels}
+Im ersten Schritt erfolgt eine Skalierung vom Daten-Koordinatensystem (x-Achse: Zeitstempel, Typ \texttt{long}; y-Achse: Preis, Typ \texttt{double}) ins Referenz-Ko\-or\-di\-na\-ten\-sys\-tem des Panels (x- und y-Achse: Koordinaten in Pixel, Typ \texttt{int}). Das Referenz-Koordinatensystem ist immer genau so breit und hoch wie das Panel, das heißt, alle Werte in diesem System sollten zwischen 0 und der Panelbreite bzw. -höhe liegen (es gibt leider Ausnahmen, siehe weiter unten). Die Berechnung erfolgt in der Methode \texttt{Stocker\-Chart::cal\-cu\-late\-Scaled\-Values()}. Dort werden die Minima und Maxima in Richtung beider Koordinatenachsen bestimmt, und dann mittels einer linearen Abbildung die skalierten Koordinaten des Referenz-Koordinatensystems berechnet. Für die x-Achse: 
+\begin{equation} \label{eq:xscale_1}
+x^s_i = x_{ref} ~\frac{t_i - t_{min}}{t_{max} - t_{min}}
+\end{equation}
+wobei $x^s_i$ der \textit{s}kalierte Wert im Referenz-Koordinatensystem für den $i$-ten Datenpunkt ist (zwischen 0 und Panelhöhe), $x_{ref}$ ist die Höhe des Panels, $t_i$ ist der Zeitstempel des $i$-ten Datensatzes und $t_{min}$ bzw. $t_{max}$ sind der minimale bzw. maximale Wert des Zeitstempels in der Datenreihe. Die Skalierung der y-Werte erfolgt analog, und zwar für jeden y-Wert (also jeweils für die Werte \textit{open}, \textit{close}, \textit{low} und \textit{high}, die in den Candles der Datenreihe auftreten). Beispielhaft für die \textit{low}-Werte:
+\begin{equation} \label{eq:yscale_1}
+y^{low,s}_i = y_{ref} ~\frac{y^{low}_i - y^{close}_{min}}{y^{close}_{max} - y^{close}_{min}}
+\end{equation}
+
+Wie man hieran sieht, wird für alle vier $y$-Werte einheitlich mit den min/max-Werten von $y^{close}$ skaliert, da die Skalierung der vier $y$-Werte einheitlich sein muss, um sie gemeinsam Zeichnen zu können. Dies führt allerdings insofern zu Problemen, als beim Kerzen-Chart der höchste Wert von $y^{high,s}_i$ und der niedrigste Wert von $y^{low,s}_i$ deutlich außerhalb des Referenzsystems liegen können (also größer als die Panelhöhe bzw. kleiner als 0). Dieses Problem wird in Schritt 2 behoben.
+
+Analog findet diese Skalierung auch für die Indikatoren und die Alarmwerte statt, allerdings in den separaten Methoden \texttt{ChartPanel::cal\-cu\-late\-Scaled\-Indicators()} und \texttt{ChartPanel::calculate\-Scaled\-Alarms()}. 
+
+\subsubsection{Skalierungsschritt 2: Vom Referenz-System des Panels ins gezeichnete Koordinatensystem}
+Im zweiten Schritt wird vom Referensystem des Panels in das gezeichnete Koordinatensystem transformiert. Das gezeichnete Koordinatensystem ist das, welches für Benutzer:innen über die eingezeichneten Koordinatenachsen sichtbar ist. Es unterscheidet sich vom Referenzsystem des Panels dadurch, dass rundherum ein Rand gelassen wird (um die Achsenbeschriftungen aufzunehmen) und dass die y-Achse nicht, wie in Swing üblich, von oben nach unten, sondern von unten nach oben geht. Beide Systeme sind ganzzahlig (Typ \texttt{int}). Zur Verringerung der Rundungsfehler werden allerdings Zwischenschritte mit Gleitkommazahlen (\texttt{double}) ausgeführt. 
+
+Dieser zweite Skalierungsschritt wird von den Methoden \texttt{ChartPanel::x(int x)} und \texttt{ChartPanel::y(int y)} übernommen (die Namen der Methoden sind sehr kurz gewählt, weil diese beim Zeichnen sehr häufig benutzt werden zum Zeichnen der einzelnen Datenpunkte). Die Berechnung der Zeichnungs-Koordinaten $x_z$ und $y_z$ geschieht folgendermaßen:
+\begin{equation} \label{eq:xscale_2}
+x^z_i = r_x + x^s_i ~s_x
+\end{equation}
+\begin{equation} \label{eq:yscale_2}
+y^z_i =  y_{ref} - r_y - y^s_i ~s_y ~s_y^{min/max} - o_y ~y_{ref}
+\end{equation}
+Dabei sind $x^s_i$ und $y^s_i$ die Werte im Panel-Referenzsystem, also das Ergebnis aus Schritt 1, $r_x$ und $r_y$ die Breite des linken bzw. oberen Randes und $s_x$ bzw. $s_y$ sind Skalierungsfaktoren, die das Referenzkoordinatensystem in den beiden Richtungen so \glqq zusammendrücken\grqq, dass links und rechts bzw. oben und unten genug Platz für die Ränder und< Achsenbeschriftungen bleibt. Diese Skalierungsfaktoren wurden zuvor schon im Rahmen von Schritt 1 mitberechnet als $s_x = (x_{ref} - 2 ~r_x) / x_{ref}$ bzw. $s_y = (y_{ref} - 2 ~r_y) / y_{ref}$.
+Außerdem ist $s_y^{min/max}$ ein zusätzlicher Skalierungsfaktor, der der Tatsache Rechnung trägt, dass bei Schritt 1 in Gleichung \eqref{eq:yscale_1} einheitlich mit den min/max-Werten von $y^{close}$ skaliert wurde, und somit das maximale $y^{high}$ und das minimale $y^{low}$ außerhalb des Zeichenbereichs liegen können. Er wird wie folgt berechnet:
+$$ s_y^{min/max} = \frac{y^{close}_{max} - y^{close}_{min}}{y^{high}_{max} - y^{low}_{min}} $$
+und gibt an, um wie viel die Differenz der extremen \textit{close}-Werte kleiner ist als die Differenz zwischen dem größten und kleinsten Wert insgesamt. Anschaulich betrachtet dient er in Gleichung \eqref{eq:yscale_2} dazu, den $y^s$-Wertebereich aus Schritt 1 nochmal so zusammenzustauchen, dass auch der größte Wert von $y^{high}$ und der kleinste Wert von $y^{low}$ ins gezeichnete Koordinatensystem passt. 
+
+Das ist aber leider immer noch nicht ganz ausreichend, denn die zusätzliche Skalierung mit $s_y^{min/max}$ berücksichtigt nicht, ob wegen $y^{high}$ oder wegen $y^{low}$ oder wegen beiden Werten skaliert wurde, und könnte es sein (wenn man den letzten Term in Gleichung \eqref{eq:yscale_2} weg ließe), dass der gezeichnete Plot zwar die richtige Höhe hat, aber zu weit oben oder unten im Panel sitzt bzw. sogar oben oder unten über das Panel hinausragt. Dies wird in Gleichung \eqref{eq:yscale_2} mit dem Offset-Faktor $o_y$ korrigiert: Er beschreibt die Verschiebung nach oben oder unten, die nötig ist, um den Plot sauber in der Mitte des Panels sitzen zu haben. Ermittelt wird er ebenfalls einmalig im Zuge der Berechnungen für Schritt 1 (in \texttt{Chart\-Panel::cal\-cu\-late\-Scaled\-Values()} durch Überprüfung des Ergebnisses von \texttt{ChartPanel::y($y^{high,s}_{max}$)} und \texttt{ChartPanel::y($y^{low,s}_{min}$)}: Wenn diese außerhalb des Zeichenbereichs liegen, wird iterativ der Offset-Faktor $o_y$ angepasst und erneut überprüft. In seltenen Fällen mit extremen Werten kann es nötig sein, zusätzlich noch $s_y^{min/max}$ zu verkleinern.
+
+\subsubsection{Das Zeichnen}
+Das Zeichnen im engeren Sinne ist auf verschiedene Methoden aufgeteilt, nämlich (alle in \texttt{ChartPanel}): \texttt{drawCoordinateLines(...)} (zeichnet die Koordinatenachsen), \texttt{drawTicks(...)} (Striche an den Koordinatenachsen sowie Achsenbeschriftungen), \texttt{drawDataLine(...)} (Linien-Plot), \texttt{drawDataCandles(...)} (Kerzen-Plot), \texttt{draw\-In\-di\-ca\-tors(...)} (zeichnet alle Indikatoren), \texttt{drawAlarms(...)} (Alarme) und \texttt{draw\-Cross\-lines(...)} (zeichnet das Fadenkreuz über das ganze Panel). 
+
+Allerdings hat sich herausgestellt, dass es ungünstig ist, alle diese Zeichenoperationen jedes Mal direkt in \texttt{paintComponent(...)} auszuführen, weil diese Methode relativ oft aufgerufen wird. Zum Beispiel wird sie von Swing auch dann aufgerufen, wenn eine anderes Chart-Fenster, was sich mit diesem Chart-Fenster überlappt, neu gezeichnet wird, oder wenn ein:e Nutzer:in mit der Maus über das Chart fährt und das Fadenkreuz ständig neu gezeichnet wird. Das ist in Summe doch recht aufwändig, kann zu signifikanter CPU-Auslastung führen und lässt die Anwendung für die Benutzer:innen spürbar träge werden. Deshalb wird als Zwischenschritt in der Methode \texttt{ChartPanel::paintImage()} ein Bild (\texttt{BufferedImage}) gezeichnet mithilfe der im vorangehenden Absatz erwähnten Zeichen-Methoden (bis auf \texttt{drawCrosslines(...)}). In \texttt{paintComponent(...)} wird dann nur noch dieses Bild gezeichnet mit \texttt{Graphics2D::drawImage(...)}. Darüber wird dann noch das Fadenkreuz gezeichnet. So geht das (häufige) Zeichnen des Panels in \texttt{paintComponent(...)} relativ schnell und ressourcenschonend, während das eher aufwändige Zeichnen des Bildes mit \texttt{paintImage} nur noch nötig ist, wenn sich die Daten oder die Panel-Größe geändert haben. 
+
+
+\end{document}
